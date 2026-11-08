@@ -2,6 +2,17 @@
 (function(g){
 "use strict";
 var H = {};
+/* Nyelv: "hu" (bíró-app) vagy "sr" (néző oldal, szerb latin) */
+H.lang = "hu";
+var TXT = {
+  hu:{noTeam:"Nincs csapat.", box:"Box", team:"Csapat", fish:"Hal", total:"Össz (kg)", big:"Big fish", place:"Hely",
+      noCatch:"Még nincs fogás.", tapHint:"Koppints egy csapatra a halak listájáért. Rendezés:", byBox:"box szerint", byPlace:"helyezés szerint",
+      bigTitle:"🏆 Big Fish", boxW:"box", biggest:"Verseny legnagyobb hala", summary:"Összesítés", sumKg:"Összes kg", sumN:"Halak száma", avg:"Átlag (kg)"},
+  sr:{noTeam:"Nema ekipa.", box:"Box", team:"Ekipa", fish:"Riba", total:"Ukupno (kg)", big:"Big fish", place:"Plasman",
+      noCatch:"Još nema ulova.", tapHint:"Dodirni ekipu za listu riba. Sortiranje:", byBox:"po boksu", byPlace:"po plasmanu",
+      bigTitle:"🏆 Big Fish", boxW:"boks", biggest:"Najveća riba takmičenja", summary:"Ukupno", sumKg:"Ukupno kg", sumN:"Broj riba", avg:"Prosek (kg)"}
+};
+function T(k){ return (TXT[H.lang]||TXT.hu)[k]; }
 H.esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };
 H.num = function(s){ if(typeof s==="number") return s; s=String(s==null?"":s).trim().replace(/\s/g,"").replace(",","."); var n=parseFloat(s); return isFinite(n)?n:NaN; };
 H.fmt = function(n,d){ if(n==null||!isFinite(n)) return "–"; d=d==null?3:d; return n.toFixed(d).replace(".",","); };
@@ -57,31 +68,31 @@ H.resultsHTML = function(c, view){
     var rk = H.rankSector(sec);
     var rows = view.sort==="box" ? rk.rows.slice().sort(function(a,b){return H.boxCmp(a.team.box,b.team.box);}) : rk.sorted;
     s += '<div class="card"><div class="secthead" style="background:'+esc(sec.color)+'"><span class="t">'+esc(sec.name)+'</span><span>'+kg(rk.total)+' kg</span></div>';
-    if(!rows.length){ s+='<div class="empty small">Nincs csapat.</div></div>'; return; }
-    s += '<table class="res"><thead><tr><th>Box</th><th>Csapat</th><th class="n">Hal</th><th class="n">Össz (kg)</th><th class="n">Big fish</th><th class="n">Hely</th></tr></thead><tbody>';
+    if(!rows.length){ s+='<div class="empty small">'+T('noTeam')+'</div></div>'; return; }
+    s += '<table class="res"><thead><tr><th>'+T('box')+'</th><th>'+T('team')+'</th><th class="n">'+T('fish')+'</th><th class="n">'+T('total')+'</th><th class="n">'+T('big')+'</th><th class="n">'+T('place')+'</th></tr></thead><tbody>';
     rows.forEach(function(r){
       s += '<tr class="clk" data-a="toggle" data-id="'+esc(r.team.id)+'"><td><b>'+esc(r.team.box)+'</b></td><td>'+esc(r.team.name)+'</td><td class="n">'+r.count+'</td><td class="n"><b>'+kg(r.total)+'</b></td><td class="n">'+(r.count?kg(r.big):'–')+'</td><td class="n">'+(r.count?'<span class="place p'+r.place+'">'+r.place+'</span>':'–')+'</td></tr>';
       if(view.open[r.team.id]){
         s += '<tr class="det"><td colspan="6"><div class="chips" style="margin:0">'+(r.team.catches.length? r.team.catches.map(function(k,i){
-          return '<span class="chip'+(k.w===r.big?' bf':'')+'"><span class="muted">'+(i+1)+'.</span> '+kg(k.w)+(c.periods.length>1?'<sup>'+esc(H.periodName(c,k.p))+'</sup>':'')+'</span>'; }).join('') : '<span class="muted small">Még nincs fogás.</span>')+'</div></td></tr>';
+          return '<span class="chip'+(k.w===r.big?' bf':'')+'"><span class="muted">'+(i+1)+'.</span> '+kg(k.w)+(c.periods.length>1?'<sup>'+esc(H.periodName(c,k.p))+'</sup>':'')+'</span>'; }).join('') : '<span class="muted small">'+T('noCatch')+'</span>')+'</div></td></tr>';
       }
     });
-    s += '</tbody></table><div class="small muted" style="margin-top:6px">Koppints egy csapatra a halak listájáért. Rendezés: <a href="#" data-a="sort">'+(view.sort==="box"?'box szerint':'helyezés szerint')+'</a></div></div>';
+    s += '</tbody></table><div class="small muted" style="margin-top:6px">'+T('tapHint')+' <a href="#" data-a="sort">'+(view.sort==="box"?T('byBox'):T('byPlace'))+'</a></div></div>';
   });
   s += '</div>';
-  s += '<div class="card"><h2>🏆 Big Fish</h2>';
+  s += '<div class="card"><h2>'+T('bigTitle')+'</h2>';
   if(c.periods.length>1){
     c.periods.forEach(function(p){
       var b = cs.perBig[p.id];
-      s += '<div class="bfrow"><div class="grow"><div class="small muted">'+esc(p.name)+'</div><b>'+(b?esc(b.team.name):'–')+'</b>'+(b?' <span class="muted small">('+esc(b.sector.name)+', box '+esc(b.team.box)+')</span>':'')+'</div><div class="w">'+(b?kg(b.w)+' kg':'–')+'</div></div>';
+      s += '<div class="bfrow"><div class="grow"><div class="small muted">'+esc(p.name)+'</div><b>'+(b?esc(b.team.name):'–')+'</b>'+(b?' <span class="muted small">('+esc(b.sector.name)+', '+T('boxW')+' '+esc(b.team.box)+')</span>':'')+'</div><div class="w">'+(b?kg(b.w)+' kg':'–')+'</div></div>';
     });
   }
   var o = cs.overall;
-  s += '<div class="bfrow main"><div class="grow"><div class="small muted">Verseny legnagyobb hala</div><b>'+(o?esc(o.team.name):'–')+'</b>'+(o?' <span class="muted small">('+esc(o.sector.name)+', box '+esc(o.team.box)+')</span>':'')+'</div><div class="w">'+(o?kg(o.w)+' kg':'–')+'</div></div></div>';
-  s += '<div class="card"><h2>Összesítés</h2><div class="stats">'+
-    '<div class="stat"><div class="v">'+kg(cs.total)+'</div><div class="l">Összes kg</div></div>'+
-    '<div class="stat"><div class="v">'+cs.count+'</div><div class="l">Halak száma</div></div>'+
-    '<div class="stat"><div class="v">'+(cs.avg==null?'–':kg(cs.avg))+'</div><div class="l">Átlag (kg)</div></div></div></div>';
+  s += '<div class="bfrow main"><div class="grow"><div class="small muted">'+T('biggest')+'</div><b>'+(o?esc(o.team.name):'–')+'</b>'+(o?' <span class="muted small">('+esc(o.sector.name)+', '+T('boxW')+' '+esc(o.team.box)+')</span>':'')+'</div><div class="w">'+(o?kg(o.w)+' kg':'–')+'</div></div></div>';
+  s += '<div class="card"><h2>'+T('summary')+'</h2><div class="stats">'+
+    '<div class="stat"><div class="v">'+kg(cs.total)+'</div><div class="l">'+T('sumKg')+'</div></div>'+
+    '<div class="stat"><div class="v">'+cs.count+'</div><div class="l">'+T('sumN')+'</div></div>'+
+    '<div class="stat"><div class="v">'+(cs.avg==null?'–':kg(cs.avg))+'</div><div class="l">'+T('avg')+'</div></div></div></div>';
   return s;
 };
 g.HCore = H;
