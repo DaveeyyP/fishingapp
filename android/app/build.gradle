@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'hu.horgasz.biro'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "hu.horgasz.biro"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // Saját aláíró kulcs, hogy a frissítések felülírják a régi verziót (nem kell törölni)
+    signingConfigs {
+        shared {
+            storeFile file('../keystore/biro.jks')
+            storePassword 'horgasz-biro'
+            keyAlias 'biro'
+            keyPassword 'horgasz-biro'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+        debug {
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

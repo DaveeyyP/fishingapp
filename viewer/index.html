@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Horgászverseny – Élő eredmények</title>
+<meta name="theme-color" content="#0f6b5c">
+<link rel="stylesheet" href="style.css">
+<style>
+.conn{font-size:12px;color:var(--mut)}
+.conn.off{color:var(--bad)}
+.flash{animation:fl 1.2s ease-out}
+@keyframes fl{0%{background:#fff4e0}100%{background:transparent}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="core.js"></script>
+<script>
+(function(){
+"use strict";
+var H = window.HCore, esc = H.esc;
+var app = document.getElementById("app");
+var q = new URLSearchParams(location.search);
+var dbParam = (q.get("db")||"").trim(), compId = (q.get("c")||"").trim();
+var view = {sort:"place", open:{}};
+var data = null, all = null, connected = false, lastUpdate = null, es = null, pollTimer = null;
+
+/* Csak Firebase adatbázis címet fogadunk el */
+var host = dbParam.replace(/^https?:\/\//,"").replace(/\/.*$/,"");
+var valid = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.(firebasedatabase\.app|firebaseio\.com)$/i.test(host) && (!compId || /^[a-z0-9]+$/i.test(compId));
+var base = "https://"+host;
+
+function topbar(title){
+  return '<div class="top"><span style="font-size:22px">🎣</span><h1>'+esc(title)+'</h1></div>';
+}
+function render(){
+  var s;
+  if(!valid){ s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Hibás vagy hiányos link. Kérd el újra a bírótól.</div></div>'; }
+  else if(compId){
+    if(data===null) s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Betöltés…</div></div>';
+    else if(data===false) s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Ez a verseny nem található (lehet, hogy törölték).</div></div>';
+    else {
+      var upd = data.updated ? new Date(data.updated) : null;
+      s = topbar(data.name||"Verseny") + '<div class="wrap"><div class="card row"><span class="live"><i></i>ÉLŐ</span>'+
+        '<span class="grow small muted">'+esc(data.date||"")+(data.place?' · '+esc(data.place):'')+'</span>'+
+        '<span class="conn'+(connected?'':' off')+'">'+(connected?'Frissítve: '+(upd?upd.toLocaleTimeString("hu-HU",{hour:"2-digit",minute:"2-digit"}):'–'):'Kapcsolódás…')+'</span></div>'+
+        H.resultsHTML(data, view) + '<div class="small muted" style="text-align:center">Az oldal magától frissül, nem kell újratölteni.</div></div>';
+    }
+  } else {
+    s = topbar("Horgászversenyek") + '<div class="wrap">';
+    if(all===null) s += '<div class="card empty">Betöltés…</div>';
+    else {
+      var list = Object.keys(all||{}).map(function(k){ return H.normalize(all[k]); }).filter(Boolean).sort(function(a,b){return (b.updated||0)-(a.updated||0);});
+      if(!list.length) s += '<div class="card empty">Még nincs verseny.</div>';
+      list.forEach(function(x){
+        var st=H.compStats(x);
+        s += '<a class="card comp" style="text-decoration:none;color:inherit" href="?db='+encodeURIComponent(host)+'&c='+encodeURIComponent(x.id)+'"><div class="ico">🐟</div><div class="grow"><h3>'+esc(x.name||"Verseny")+'</h3><div class="muted small">'+esc(x.date||"")+'</div><div class="small">'+H.kg(st.total)+' kg · '+st.count+' hal</div></div><div class="muted" style="font-size:20px">›</div></a>';
+      });
+    }
+    s += '</div>';
+  }
+  var y = window.scrollY;
+  app.innerHTML = s;
+  window.scrollTo(0,y);
+  if(data && data.name) document.title = data.name + " – Élő eredmények";
+}
+
+app.addEventListener("click", function(e){
+  var el = e.target.closest("[data-a]"); if(!el) return;
+  var a = el.getAttribute("data-a");
+  if(a==="sort"){ e.preventDefault(); view.sort = view.sort==="box"?"place":"box"; render(); }
+  if(a==="toggle"){ var id=el.getAttribute("data-id"); view.open[id]=!view.open[id]; render(); }
+});
+
+/* ---- élő kapcsolat (Firebase streaming), tartalék: 15 mp-es lekérdezés ---- */
+var path = compId ? "comps/"+compId : "comps";
+function setAt(obj, p, val){
+  var parts = p.split("/").filter(Boolean);
+  if(!parts.length) return val;
+  obj = obj && typeof obj==="object" ? obj : {};
+  var cur = obj;
+  for(var i=0;i<parts.length-1;i++){ if(!cur[parts[i]] || typeof cur[parts[i]]!=="object") cur[parts[i]]={}; cur=cur[parts[i]]; }
+  if(val===null) delete cur[parts[parts.length-1]]; else cur[parts[parts.length-1]] = val;
+  return obj;
+}
+var raw = null;
+function apply(){
+  if(compId){ data = raw ? H.normalize(JSON.parse(JSON.stringify(raw))) : false; }
+  else all = raw || {};
+  lastUpdate = Date.now(); render();
+}
+function startStream(){
+  if(!window.EventSource){ startPoll(); return; }
+  try{ es = new EventSource(base+"/"+path+".json"); }catch(e){ startPoll(); return; }
+  es.addEventListener("put", function(ev){ var m=JSON.parse(ev.data); raw = setAt(raw, m.path, m.data); connected=true; apply(); });
+  es.addEventListener("patch", function(ev){ var m=JSON.parse(ev.data); Object.keys(m.data||{}).forEach(function(k){ raw = setAt(raw, (m.path+"/"+k), m.data[k]); }); connected=true; apply(); });
+  es.addEventListener("cancel", function(){ es.close(); connected=false; render(); });
+  var errs = 0;
+  es.onerror = function(){
+    connected=false; render(); errs++;
+    /* ha az élő kapcsolat nem jön létre (pl. túl sok néző), átváltunk 15 mp-es frissítésre */
+    if(es.readyState===2 || errs>=3){ es.close(); startPoll(); }
+  };
+  setTimeout(function(){ if(raw===null && !connected){ es.close(); startPoll(); } }, 10000);
+}
+function startPoll(){
+  if(pollTimer) return;
+  var tick = function(){
+    fetch(base+"/"+path+".json").then(function(r){ return r.json(); }).then(function(j){ raw=j; connected=true; apply(); })
+      .catch(function(){ connected=false; render(); });
+  };
+  tick(); pollTimer = setInterval(tick, 15000);
+}
+render();
+if(valid) startStream();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "comps": {
+      ".read": true,
+      "$compId": {
+        ".write": "auth != null"
+      }
+    }
+  }
+}
