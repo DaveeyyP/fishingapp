@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hu">
+<html lang="sr-Latn">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Horgászverseny – Élő eredmények</title>
+<title>Takmičenje u ribolovu – Rezultati uživo</title>
 <meta name="theme-color" content="#0f6b5c">
 <link rel="stylesheet" href="style.css">
 <style>
@@ -20,6 +20,7 @@
 (function(){
 "use strict";
 var H = window.HCore, esc = H.esc;
+H.lang = "sr";
 var app = document.getElementById("app");
 var q = new URLSearchParams(location.search);
 var dbParam = (q.get("db")||"").trim(), compId = (q.get("c")||"").trim();
@@ -36,26 +37,26 @@ function topbar(title){
 }
 function render(){
   var s;
-  if(!valid){ s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Hibás vagy hiányos link. Kérd el újra a bírótól.</div></div>'; }
+  if(!valid){ s = topbar("Takmičenje u ribolovu")+'<div class="wrap"><div class="card empty">Neispravan ili nepotpun link. Zatražite ga ponovo od sudije.</div></div>'; }
   else if(compId){
-    if(data===null) s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Betöltés…</div></div>';
-    else if(data===false) s = topbar("Horgászverseny")+'<div class="wrap"><div class="card empty">Ez a verseny nem található (lehet, hogy törölték).</div></div>';
+    if(data===null) s = topbar("Takmičenje u ribolovu")+'<div class="wrap"><div class="card empty">Učitavanje…</div></div>';
+    else if(data===false) s = topbar("Takmičenje u ribolovu")+'<div class="wrap"><div class="card empty">Takmičenje nije pronađeno (možda je obrisano).</div></div>';
     else {
       var upd = data.updated ? new Date(data.updated) : null;
-      s = topbar(data.name||"Verseny") + '<div class="wrap"><div class="card row"><span class="live"><i></i>ÉLŐ</span>'+
+      s = topbar(data.name||"Takmičenje") + '<div class="wrap"><div class="card row"><span class="live"><i></i>UŽIVO</span>'+
         '<span class="grow small muted">'+esc(data.date||"")+(data.place?' · '+esc(data.place):'')+'</span>'+
-        '<span class="conn'+(connected?'':' off')+'">'+(connected?'Frissítve: '+(upd?upd.toLocaleTimeString("hu-HU",{hour:"2-digit",minute:"2-digit"}):'–'):'Kapcsolódás…')+'</span></div>'+
-        H.resultsHTML(data, view) + '<div class="small muted" style="text-align:center">Az oldal magától frissül, nem kell újratölteni.</div></div>';
+        '<span class="conn'+(connected?'':' off')+'">'+(connected?'Ažurirano: '+(upd?upd.toLocaleTimeString("sr-Latn-RS",{hour:"2-digit",minute:"2-digit"}):'–'):'Povezivanje…')+'</span></div>'+
+        H.resultsHTML(data, view) + '<div class="small muted" style="text-align:center">Stranica se sama osvežava, nije potrebno ponovo je učitavati.</div></div>';
     }
   } else {
-    s = topbar("Horgászversenyek") + '<div class="wrap">';
-    if(all===null) s += '<div class="card empty">Betöltés…</div>';
+    s = topbar("Takmičenja") + '<div class="wrap">';
+    if(all===null) s += '<div class="card empty">Učitavanje…</div>';
     else {
       var list = Object.keys(all||{}).map(function(k){ return H.normalize(all[k]); }).filter(Boolean).sort(function(a,b){return (b.updated||0)-(a.updated||0);});
-      if(!list.length) s += '<div class="card empty">Még nincs verseny.</div>';
+      if(!list.length) s += '<div class="card empty">Još nema takmičenja.</div>';
       list.forEach(function(x){
         var st=H.compStats(x);
-        s += '<a class="card comp" style="text-decoration:none;color:inherit" href="?db='+encodeURIComponent(host)+'&c='+encodeURIComponent(x.id)+'"><div class="ico">🐟</div><div class="grow"><h3>'+esc(x.name||"Verseny")+'</h3><div class="muted small">'+esc(x.date||"")+'</div><div class="small">'+H.kg(st.total)+' kg · '+st.count+' hal</div></div><div class="muted" style="font-size:20px">›</div></a>';
+        s += '<a class="card comp" style="text-decoration:none;color:inherit" href="?db='+encodeURIComponent(host)+'&c='+encodeURIComponent(x.id)+'"><div class="ico">🐟</div><div class="grow"><h3>'+esc(x.name||"Takmičenje")+'</h3><div class="muted small">'+esc(x.date||"")+'</div><div class="small">'+H.kg(st.total)+' kg · '+st.count+' riba</div></div><div class="muted" style="font-size:20px">›</div></a>';
       });
     }
     s += '</div>';
@@ -63,7 +64,7 @@ function render(){
   var y = window.scrollY;
   app.innerHTML = s;
   window.scrollTo(0,y);
-  if(data && data.name) document.title = data.name + " – Élő eredmények";
+  if(data && data.name) document.title = data.name + " – Rezultati uživo";
 }
 
 app.addEventListener("click", function(e){
@@ -85,9 +86,16 @@ function setAt(obj, p, val){
   return obj;
 }
 var raw = null;
+/* A bíró-app alapértelmezett magyar elnevezéseit szerbre cseréljük (csak a megjelenítésben) */
+function toSr(c){
+  if(!c) return c;
+  c.sectors.forEach(function(s){ s.name = String(s.name||"").replace(/^Szektor\b/i,"Sektor"); });
+  c.periods.forEach(function(p){ p.name = String(p.name||"").replace(/^(\d+)\.\s*nap$/i,"$1. dan").replace(/^Verseny$/i,"Takmičenje"); });
+  return c;
+}
 function apply(){
-  if(compId){ data = raw ? H.normalize(JSON.parse(JSON.stringify(raw))) : false; }
-  else all = raw || {};
+  if(compId){ data = raw ? toSr(H.normalize(JSON.parse(JSON.stringify(raw)))) : false; }
+  else { all = {}; Object.keys(raw||{}).forEach(function(k){ all[k] = toSr(H.normalize(JSON.parse(JSON.stringify(raw[k])))); }); }
   lastUpdate = Date.now(); render();
 }
 function startStream(){
