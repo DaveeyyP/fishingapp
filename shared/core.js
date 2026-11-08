@@ -7,10 +7,10 @@ H.lang = "hu";
 var TXT = {
   hu:{noTeam:"Nincs csapat.", box:"Box", team:"Csapat", fish:"Hal", total:"Össz (kg)", big:"Big fish", place:"Hely",
       noCatch:"Még nincs fogás.", tapHint:"Koppints egy csapatra a halak listájáért. Rendezés:", byBox:"box szerint", byPlace:"helyezés szerint",
-      bigTitle:"🏆 Big Fish", boxW:"box", biggest:"Verseny legnagyobb hala", summary:"Összesítés", sumKg:"Összes kg", sumN:"Halak száma", avg:"Átlag (kg)"},
+      bigTitle:"Big Fish", boxW:"box", biggest:"Verseny legnagyobb hala", summary:"Összesítés", sumKg:"Összes kg", sumN:"Halak száma", avg:"Átlag (kg)"},
   sr:{noTeam:"Nema ekipa.", box:"Box", team:"Ekipa", fish:"Riba", total:"Ukupno (kg)", big:"Big fish", place:"Plasman",
       noCatch:"Još nema ulova.", tapHint:"Dodirni ekipu za listu riba. Sortiranje:", byBox:"po boksu", byPlace:"po plasmanu",
-      bigTitle:"🏆 Big Fish", boxW:"boks", biggest:"Najveća riba takmičenja", summary:"Ukupno", sumKg:"Ukupno kg", sumN:"Broj riba", avg:"Prosek (kg)"}
+      bigTitle:"Big Fish", boxW:"boks", biggest:"Najveća riba takmičenja", summary:"Ukupno", sumKg:"Ukupno kg", sumN:"Broj riba", avg:"Prosek (kg)"}
 };
 function T(k){ return (TXT[H.lang]||TXT.hu)[k]; }
 H.esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };

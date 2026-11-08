@@ -33,7 +33,7 @@ var valid = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.(firebasedatabase\.app|firebaseio\.com)
 var base = "https://"+host;
 
 function topbar(title){
-  return '<div class="top"><span style="font-size:22px">🎣</span><h1>'+esc(title)+'</h1></div>';
+  return '<div class="top"><h1>'+esc(title)+'</h1></div>';
 }
 function render(){
   var s;
@@ -56,7 +56,7 @@ function render(){
       if(!list.length) s += '<div class="card empty">Još nema takmičenja.</div>';
       list.forEach(function(x){
         var st=H.compStats(x);
-        s += '<a class="card comp" style="text-decoration:none;color:inherit" href="?db='+encodeURIComponent(host)+'&c='+encodeURIComponent(x.id)+'"><div class="ico">🐟</div><div class="grow"><h3>'+esc(x.name||"Takmičenje")+'</h3><div class="muted small">'+esc(x.date||"")+'</div><div class="small">'+H.kg(st.total)+' kg · '+st.count+' riba</div></div><div class="muted" style="font-size:20px">›</div></a>';
+        s += '<a class="card comp" style="text-decoration:none;color:inherit" href="?db='+encodeURIComponent(host)+'&c='+encodeURIComponent(x.id)+'"><div class="grow"><h3>'+esc(x.name||"Takmičenje")+'</h3><div class="muted small">'+esc(x.date||"")+'</div><div class="small">'+H.kg(st.total)+' kg · '+st.count+' riba</div></div><div class="muted" style="font-size:20px">›</div></a>';
       });
     }
     s += '</div>';

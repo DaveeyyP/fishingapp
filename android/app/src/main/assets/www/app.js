@@ -55,10 +55,13 @@ async function token(){
   return auth.idToken;
 }
 async function dbReq(method, path, body){
-  var t = await token();
-  var r = await fetch(dbBase()+"/"+path+".json?auth="+encodeURIComponent(t), {method:method, headers:{"Content-Type":"application/json"}, body: body==null?undefined:JSON.stringify(body)});
+  var t = await token(), r;
+  try{
+    r = await fetch(dbBase()+"/"+path+".json?auth="+encodeURIComponent(t), {method:method, headers:{"Content-Type":"application/json"}, body: body==null?undefined:JSON.stringify(body)});
+  }catch(e){ throw new Error(navigator.onLine===false ? "net" : "badurl"); }
   if(r.status===401||r.status===403) throw new Error("denied");
-  if(!r.ok) throw new Error("HTTP "+r.status);
+  if(r.status===404) throw new Error("notfound");
+  if(!r.ok){ var txt=""; try{ txt=(await r.text()).slice(0,120); }catch(e){} throw new Error("HTTP "+r.status+" "+txt); }
   return r.json();
 }
 
@@ -83,7 +86,9 @@ async function flush(){
     var m=String(e.message||e);
     if(m==="nologin"){ setStatus("nologin"); }
     else if(m==="denied"){ setStatus("denied"); }
-    else { setStatus("offline"); scheduleFlush(15000); }
+    else if(m==="notfound"||m==="badurl"){ setStatus(m); }
+    else if(m==="net"){ setStatus("offline"); scheduleFlush(15000); }
+    else { setStatus("err", m); scheduleFlush(15000); }
   }finally{ sync.busy=false; }
 }
 async function pull(showToast){
@@ -106,8 +111,10 @@ async function pull(showToast){
 window.addEventListener("online", function(){ scheduleFlush(500); });
 setInterval(function(){ if(Object.keys(pending).length && !sync.busy) flush(); }, 20000);
 
-var STATUS = {ok:"✓ Szinkronizálva", busy:"⏳ Feltöltés…", offline:"⚠ Nincs internet – később feltöltöm", local:"● Csak a telefonon (nincs felhő beállítva)", nologin:"⚠ Jelentkezz be újra (Beállítások)", denied:"⚠ Nincs írási jog (Firebase szabályok)"};
-function setStatus(s){ sync.status=s; var el=document.getElementById("syncst"); if(el){ el.textContent=STATUS[s]||""; el.className="syncst "+s; } }
+var STATUS = {ok:"Szinkronizálva", busy:"Feltöltés…", offline:"Nincs internet – később feltöltöm", local:"Csak a telefonon (nincs felhő beállítva)", nologin:"Jelentkezz be újra (Beállítások)", denied:"Nincs írási jog (Firebase szabályok)"};
+STATUS.notfound="Az adatbázis nem található – ellenőrizd a címét (Beállítások)";
+STATUS.badurl="Az adatbázis címe hibás (Beállítások)";
+function setStatus(s, detail){ sync.status=s; if(detail!=null) sync.detail=detail; var el=document.getElementById("syncst"); if(el){ el.textContent=(s==="err"?"Feltöltési hiba: "+(sync.detail||""):STATUS[s]||""); el.className="syncst "+(s==="err"?"offline":s); } }
 
 /* ---------- mentés ---------- */
 function changed(compId){
@@ -132,21 +139,21 @@ function render(){
   persistUI();
 }
 function topbar(title, back, extra){
-  return '<div class="top">'+(back?'<button class="back" data-a="'+back+'">‹</button>':'<span style="font-size:22px">🎣</span>')+
+  return '<div class="top">'+(back?'<button class="back" data-a="'+back+'">‹</button>':'')+
     '<h1>'+esc(title)+'</h1>'+(extra||'')+'</div><div id="syncst" class="syncst"></div>';
 }
 function compCard(x){
   var st = H.compStats(x), teams=0; x.sectors.forEach(function(s){teams+=s.teams.length;});
-  return '<div class="card comp" data-a="open" data-id="'+x.id+'" style="cursor:pointer"><div class="ico">🐟</div><div class="grow"><h3>'+esc(x.name||"Névtelen verseny")+'</h3>'+
+  return '<div class="card comp" data-a="open" data-id="'+x.id+'" style="cursor:pointer"><div class="grow"><h3>'+esc(x.name||"Névtelen verseny")+'</h3>'+
     '<div class="muted small">'+esc(x.date||"")+(x.place?' · '+esc(x.place):'')+'</div>'+
     '<div class="small" style="margin-top:3px">'+x.sectors.length+' szektor · '+teams+' csapat · <b>'+kg(st.total)+' kg</b> · '+st.count+' hal</div></div><div class="muted" style="font-size:20px">›</div></div>';
 }
 function viewHome(){
-  var s = topbar("Horgászversenyek", null, '<button class="back" data-a="settings">⚙</button>') + '<div class="wrap">';
+  var s = topbar("Horgászversenyek", null, '<button class="back" data-a="settings">Beállítások</button>') + '<div class="wrap">';
   if(!cloudReady()) s += '<div class="warn" style="margin-bottom:12px">A versenyzők csak akkor látják az eredményeket, ha beállítod a felhőt és bejelentkezel. <a href="#" data-a="settings">Beállítások ›</a></div>';
   if(!state.comps.length) s += '<div class="card empty">Még nincs verseny.<br>Hozz létre egyet az alábbi gombbal.</div>';
   state.comps.slice().sort(function(a,b){return (b.updated||0)-(a.updated||0);}).forEach(function(x){ s += compCard(x); });
-  return s + '</div><button class="btn fab" data-a="newComp">＋ Új verseny</button>';
+  return s + '</div><button class="btn fab" data-a="newComp">+ Új verseny</button>';
 }
 function viewSettings(){
   var s = topbar("Beállítások", "home") + '<div class="wrap">';
@@ -156,7 +163,7 @@ function viewSettings(){
     '<label class="f">Néző oldal címe</label><input type="text" name="viewer" value="'+esc(cfg.viewer)+'" placeholder="https://felhasznalonev.github.io/horgasz-biro/" autocapitalize="off" autocorrect="off" spellcheck="false">'+
     '<button class="btn" style="margin-top:12px" type="submit">Mentés</button></form></div>';
   s += '<div class="card"><h2>Bírói fiók</h2>';
-  if(auth) s += '<p>Bejelentkezve: <b>'+esc(auth.email||"")+'</b></p><div class="row"><button class="btn sec" data-a="pull">⟳ Letöltés a felhőből</button><button class="btn danger" data-a="logout">Kijelentkezés</button></div>';
+  if(auth) s += '<p>Bejelentkezve: <b>'+esc(auth.email||"")+'</b></p><div class="row"><button class="btn sec" data-a="test">Kapcsolat tesztelése</button><button class="btn sec" data-a="pull">Letöltés a felhőből</button><button class="btn danger" data-a="logout">Kijelentkezés</button></div>';
   else s += '<form data-f="login"><label class="f">E-mail</label><input type="text" name="email" inputmode="email" value="'+esc(cfg.email)+'" autocapitalize="off">'+
     '<label class="f">Jelszó</label><input type="password" name="pw" style="border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%">'+
     '<button class="btn" style="margin-top:12px" type="submit">Bejelentkezés</button></form>';
@@ -164,7 +171,7 @@ function viewSettings(){
   return s + '</div>';
 }
 function viewComp(c){
-  var s = topbar(c.name||"Verseny", "home", '<button class="back" data-a="share">🔗 Link</button>');
+  var s = topbar(c.name||"Verseny", "home", '<button class="back" data-a="share">Link</button>');
   s += '<div class="wrap"><div class="tabs">'+
     ['input:Fogások','results:Eredmények','settings:Beállítások'].map(function(t){ var p=t.split(":"); return '<button class="'+(ui.tab===p[0]?'on':'')+'" data-a="tab" data-id="'+p[0]+'">'+p[1]+'</button>'; }).join('')+'</div>';
   if(ui.tab==="input") s += tabInput(c);
@@ -181,24 +188,24 @@ function tabInput(c){
   if(!c.sectors.length) s += '<div class="card empty">Még nincs szektor. Adj hozzá egyet!</div>';
   c.sectors.forEach(function(sec){
     var rk = H.rankSector(sec), placeOf={}; rk.rows.forEach(function(r){placeOf[r.team.id]=r.place;});
-    s += '<div class="card"><div class="secthead" style="background:'+esc(sec.color)+'"><span class="t">'+esc(sec.name)+'</span><span>'+kg(rk.total)+' kg</span><button class="btn sm sec" data-a="editSector" data-id="'+sec.id+'">✎</button></div>';
+    s += '<div class="card"><div class="secthead" style="background:'+esc(sec.color)+'"><span class="t">'+esc(sec.name)+'</span><span>'+kg(rk.total)+' kg</span><button class="btn sm sec" data-a="editSector" data-id="'+sec.id+'">Szerk.</button></div>';
     var teams = sec.teams.slice().sort(function(a,b){ return H.boxCmp(a.box,b.box); });
     if(!teams.length) s += '<div class="empty small">Nincs még csapat ebben a szektorban.</div>';
     teams.forEach(function(t){
       var st = H.teamStats(t);
       s += '<div class="team"><div class="hd"><div class="boxn" style="background:'+esc(sec.color)+'">'+esc(t.box||"–")+'</div>'+
-        '<div class="nm" data-a="editTeam" data-id="'+t.id+'" data-sec="'+sec.id+'">'+esc(t.name||"Névtelen")+' <span class="muted small">✎</span></div>'+
+        '<div class="nm" data-a="editTeam" data-id="'+t.id+'" data-sec="'+sec.id+'">'+esc(t.name||"Névtelen")+'</div>'+
         '<div class="sum"><b>'+kg(st.total)+'</b> kg<br>'+st.count+' hal · '+(st.count?placeOf[t.id]+'. hely':'–')+'</div></div>';
       if(t.catches.length){
         s += '<div class="chips">'+t.catches.map(function(k){
           return '<button class="chip'+(k.w===st.big?' bf':'')+'" data-a="editCatch" data-id="'+k.id+'" data-team="'+t.id+'" data-sec="'+sec.id+'">'+kg(k.w)+(c.periods.length>1?'<sup>'+H.periodIdx(c,k.p)+'</sup>':'')+'</button>';
         }).join('')+'</div>';
       } else s += '<div style="height:8px"></div>';
-      s += '<form class="addrow" data-f="addCatch" data-team="'+t.id+'" data-sec="'+sec.id+'"><input data-fk="w-'+t.id+'" name="w" inputmode="decimal" autocomplete="off" placeholder="Hal tömege (kg), pl. 6,375"><button class="btn" type="submit">＋</button></form></div>';
+      s += '<form class="addrow" data-f="addCatch" data-team="'+t.id+'" data-sec="'+sec.id+'"><input data-fk="w-'+t.id+'" name="w" inputmode="decimal" autocomplete="off" placeholder="Hal tömege (kg), pl. 6,375"><button class="btn" type="submit">+</button></form></div>';
     });
-    s += '<button class="btn sec big" data-a="addTeam" data-id="'+sec.id+'">＋ Csapat hozzáadása</button></div>';
+    s += '<button class="btn sec big" data-a="addTeam" data-id="'+sec.id+'">+ Csapat hozzáadása</button></div>';
   });
-  return s + '<button class="btn big" data-a="addSector">＋ Új szektor</button>';
+  return s + '<button class="btn big" data-a="addSector">+ Új szektor</button>';
 }
 function tabSettings(c){
   var s = '<div class="card"><h2>Verseny adatai</h2>'+
@@ -207,9 +214,9 @@ function tabSettings(c){
     '<label class="f">Helyszín</label><input type="text" data-ch="place" value="'+esc(c.place||"")+'"></div>';
   s += '<div class="card"><h2>Időszakok (Big Fish)</h2><div class="small muted" style="margin-bottom:8px">Többnapos versenynél add meg a napokat vagy szakaszokat. Mindegyikhez külön Big Fish készül.</div>';
   c.periods.forEach(function(p){
-    s += '<div class="per"><input type="text" data-pch="'+p.id+'" value="'+esc(p.name)+'">'+(c.periods.length>1?'<button class="btn sm danger" data-a="delPeriod" data-id="'+p.id+'">✕</button>':'')+'</div>';
+    s += '<div class="per"><input type="text" data-pch="'+p.id+'" value="'+esc(p.name)+'">'+(c.periods.length>1?'<button class="btn sm danger" data-a="delPeriod" data-id="'+p.id+'">Törlés</button>':'')+'</div>';
   });
-  s += '<button class="btn sec sm" data-a="addPeriod">＋ Időszak</button></div>';
+  s += '<button class="btn sec sm" data-a="addPeriod">+ Időszak</button></div>';
   s += '<div class="card"><h2>Műveletek</h2><div class="row">'+
     '<button class="btn sec" data-a="dupComp">Másolat sablonként (fogások nélkül)</button>'+
     '<button class="btn danger" data-a="delComp">Verseny törlése</button></div></div>';
@@ -264,6 +271,17 @@ app.addEventListener("click", function(e){
     case "sort": ui.sort = ui.sort==="box"?"place":"box"; render(); break;
     case "toggle": ui.open[id]=!ui.open[id]; render(); break;
     case "pull": pull(true); break;
+    case "test":
+      openModal('<h3>Kapcsolat teszt</h3><p class="small muted">Adatbázis: <b>'+esc(dbBase())+'</b></p><p id="testres">Tesztelés…</p><div class="row"><span class="grow"></span><button class="btn sec" data-a="closeM">Bezárás</button></div>');
+      dbReq("GET","comps").then(function(){ return dbReq("DELETE","comps/zztest"); }).then(function(){
+        var el=document.getElementById("testres"); if(el) el.innerHTML="Minden rendben, az adatbázis elérhető.";
+        modal.html=app.querySelector(".modalbg").outerHTML; flush();
+      }).catch(function(e){
+        var m=String(e.message||e), t={net:"Nincs internetkapcsolat a telefonon.", badurl:"A cím nem egy elérhető adatbázis. Ellenőrizd: https://…firebasedatabase.app vagy https://…firebaseio.com formájú legyen, a Firebase konzolban a <b>Realtime Database</b> oldal tetején látható cím (nem a böngésző címsora, és nem Firestore).", notfound:"Ezen a címen nincs adatbázis. Biztos, hogy <b>Realtime Database</b>-t hoztál létre (nem Firestore-t), és pontosan a fenti címét másoltad be?", denied:"Az adatbázis elérhető, de nincs írási/olvasási jog: másold be újra a Rules (Szabályok) fülre a database.rules.json tartalmát, és nyomd meg a Publish gombot.", nologin:"Jelentkezz be újra."}[m] || esc(m);
+        var el=document.getElementById("testres"); if(el) el.innerHTML="Hiba: "+t;
+        modal.html=app.querySelector(".modalbg").outerHTML;
+      });
+      break;
     case "logout": auth=null; save(K.auth,null); setStatus("local"); render(); break;
     case "closeM": closeModal(); break;
     case "yes": if(modal&&modal.yes) modal.yes(); break;
@@ -317,8 +335,8 @@ app.addEventListener("click", function(e){
     case "share":
       var link = liveLink(c);
       var warn = !cloudReady() ? '<div class="warn" style="margin-top:12px">Még nincs beállítva a felhő vagy nem vagy bejelentkezve, ezért a link most még nem mutat adatot. <a href="#" data-a="settings">Beállítások ›</a></div>' : '';
-      if(!link){ openModal('<h3>🔗 Link a versenyzőknek</h3><div class="warn">Előbb add meg a <b>Néző oldal címét</b> a Beállításokban.</div><div class="row" style="margin-top:12px"><span class="grow"></span><button class="btn" data-a="settings">Beállítások</button></div>'); break; }
-      openModal('<h3>🔗 Link a versenyzőknek</h3><div class="small muted" style="margin-bottom:10px">Ezen a linken a versenyzők alkalmazás nélkül, bármelyik telefonról követhetik ennek a versenynek az eredményeit. Ha új halat írsz be, magától frissül.</div>'+
+      if(!link){ openModal('<h3>Link a versenyzőknek</h3><div class="warn">Előbb add meg a <b>Néző oldal címét</b> a Beállításokban.</div><div class="row" style="margin-top:12px"><span class="grow"></span><button class="btn" data-a="settings">Beállítások</button></div>'); break; }
+      openModal('<h3>Link a versenyzőknek</h3><div class="small muted" style="margin-bottom:10px">Ezen a linken a versenyzők alkalmazás nélkül, bármelyik telefonról követhetik ennek a versenynek az eredményeit. Ha új halat írsz be, magától frissül.</div>'+
         '<input type="text" readonly value="'+esc(link)+'" id="lnk" style="font-size:12.5px">'+
         '<div class="row" style="margin-top:10px"><button class="btn grow" data-a="doShare">Megosztás…</button><button class="btn sec" data-a="copy">Másolás</button><a class="btn sec" href="'+esc(link)+'" target="_blank" style="text-decoration:none">Megnyitás</a></div>'+warn+
         '<div class="row" style="margin-top:12px"><span class="grow"></span><button class="btn ghost" data-a="closeM">Bezárás</button></div>');
@@ -337,7 +355,10 @@ app.addEventListener("submit", function(e){
   if(kind==="cfg"){
     cfg.db=f.db.value.trim(); cfg.key=f.key.value.trim(); cfg.viewer=f.viewer.value.trim();
     if(cfg.viewer && !/^https?:\/\//.test(cfg.viewer)) cfg.viewer="https://"+cfg.viewer;
-    save(K.cfg,cfg); toast("Mentve"); render(); return;
+    save(K.cfg,cfg);
+    if(cfg.db && !/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(firebasedatabase\.app|firebaseio\.com)$/i.test(dbBase())) toast("Figyelem: az adatbázis címe …firebasedatabase.app vagy …firebaseio.com végű kell legyen!");
+    else toast("Mentve");
+    render(); return;
   }
   if(kind==="login"){
     if(!dbBase()||!cfg.key){ toast("Előbb add meg az adatbázis címét és az API kulcsot, majd nyomj Mentést."); return; }
